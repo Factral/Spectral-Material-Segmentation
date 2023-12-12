@@ -38,8 +38,8 @@ args = parser.parse_args()
 #wandb.config.update(args)
 
 
-device = "cpu"#torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-torch.set_default_device(device)
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+#torch.set_default_device(device)
 
 aug_transform = A.Compose([
     A.HorizontalFlip(p=0.5),
@@ -71,7 +71,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patienc
 metrics = Metrics()
 cudnn.benchmark = True
 criterion = SADPixelwise()
-
+criterion = criterion.to(device)
 
 if args.pretrained_model_path is not None and os.path.isfile(args.pretrained_model_path):
         print("=> loading checkpoint '{}'".format(args.pretrained_model_path))
