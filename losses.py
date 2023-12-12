@@ -8,10 +8,10 @@ category2code = {"asphalt": 0, "ceramic": 1, "concrete": 2, "fabric": 3, "foliag
                             "rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
 
 class SADPixelwise(nn.Module):
-    def __init__(self):
+    def __init__(self,device):
         super(SADPixelwise, self).__init__()
         materials = glob.glob('materials/*.npy')
-        materials = [torch.from_numpy(np.load(m)).float() for m in materials]
+        materials = [torch.from_numpy(np.load(m)).float().to(device) for m in materials]
         self.code2material = {v: k for k, v in zip(materials, category2code.values())}
 
     def forward(self, input, target):

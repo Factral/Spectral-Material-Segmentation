@@ -70,7 +70,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patienc
 
 metrics = Metrics()
 cudnn.benchmark = True
-criterion = SADPixelwise()
+criterion = SADPixelwise(device=device)
 criterion = criterion.to(device)
 
 if args.pretrained_model_path is not None and os.path.isfile(args.pretrained_model_path):
