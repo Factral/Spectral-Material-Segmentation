@@ -22,7 +22,7 @@ from albumentations.pytorch import ToTensorV2
 parser = argparse.ArgumentParser(description="Spectral Recovery Toolbox")
 parser.add_argument('--method', type=str, default='mst_plus_plus')
 parser.add_argument('--pretrained_model_path', type=str, default=None)
-parser.add_argument("--batch_size", type=int, default=4, help="batch size")
+parser.add_argument("--batch_size", type=int, default=2, help="batch size")
 parser.add_argument("--epochs", type=int, default=300, help="number of epochs")
 parser.add_argument("--init_lr", type=float, default=4e-4, help="initial learning rate")
 parser.add_argument("--outf", type=str, default='./exp/mst_plus_plus/', help='path log files')
@@ -38,7 +38,7 @@ args = parser.parse_args()
 #wandb.config.update(args)
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 #torch.set_default_device(device)
 
 aug_transform = A.Compose([
