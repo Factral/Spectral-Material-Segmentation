@@ -2,3 +2,6 @@ matbase/
 __pycache__/
 */__pycache__/
 wandb/
+materials/*
+
+materials_torch.zip
