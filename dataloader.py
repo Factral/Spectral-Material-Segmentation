@@ -19,10 +19,10 @@ class LocalMatDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = self.dir + "/images_resized/" +  self.img_files[idx]
-        mask_path  = self.dir + "/masks_png/" + self.img_files[idx]
+        mask_path  = self.dir + "/materials_hs/" + self.img_files[idx].replace(".png", ".pt")
 
         image = np.array(Image.open(img_path).convert('RGB'))
-        mask = np.array(Image.open(mask_path))
+        mask = np.array(torch.load(mask_path))
 
         if self.transform:
             transformed = self.transform(image=image, mask=mask)
@@ -30,11 +30,9 @@ class LocalMatDataset(Dataset):
             mask = transformed["mask"]
         else:
             image = torch.from_numpy(image)
-            mask = torch.from_numpy(mask)
 
-        mask = mask.unsqueeze(0)
-
-        return image, mask
+        print(mask.shape)
+        return image, mask.permute(2,0,1).float()
     
 if __name__ == '__main__':
     train_files = np.load('train_files.npy')

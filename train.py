@@ -92,8 +92,6 @@ def train(model, data_loader, optimizer, lossfunc):
         optimizer.zero_grad()
         outputs = model(inputs)
 
-        print(labels.shape)
-        print(outputs.shape)
 
         loss = lossfunc(outputs, labels) 
 

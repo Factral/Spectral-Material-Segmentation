@@ -13,23 +13,7 @@ class SADPixelwise(nn.Module):
         materials = glob.glob('materials/*.npy')
         materials = [torch.from_numpy(np.load(m)).float().to(device) for m in materials]
         self.code2material = {v: k for k, v in zip(materials, category2code.values())}
-
-    def convert_target_to_material(self, target):
-        """
-        Converts the target image to a material image.
-        Params:
-            target -> Hyperspectral image (batch_size, height, width, 1)
-        Returns:
-            material_image -> Material image (batch_size, height, width, wavelength)
-        """
-        batch_size, height, width, _ = target.shape
-        target_flat = target.view(-1)
-        material_flat = torch.stack([
-            self.code2material[val.item()] if val.item() != 255 else torch.zeros(31)
-            for val in target_flat
-        ])        # Reorganizar el tensor a la forma deseada
-        material_image = material_flat.view(batch_size, height, width, -1)
-        return material_image
+        self.num_bands = 31
 
     def forward(self, input, target):
         """
@@ -38,32 +22,27 @@ class SADPixelwise(nn.Module):
 
         Params:
             input -> Output of the network (batch_size, height, width, 31)
-            target -> Hyperspectral image (batch_size, height, width, 1)
+            target -> Hyperspectral image (batch_size, height, width, 31)
 
         Returns:
             total_sad: Sum of SAD across all pixels
         """
-        batch_size, bands, height, width = input.shape
 
-        # Convertir target a material
-        target_material = self.convert_target_to_material(target)
+        try:
+            normalize_r = torch.norm(input, p=2, dim=3, keepdim=True)
+            normalize_g = torch.norm(target, p=2, dim=3, keepdim=True)
+            numerator = torch.sum(torch.mul(input, target), dim=3, keepdim=True)
+
+            elemnt = numerator / (normalize_r * normalize_g)
+
+            sad = torch.acos(elemnt)
+
+
+        except ValueError:
+            return 0.0
         
-        # Aplanar dimensiones para operaciones vectorizadas
-        input_flat = input.reshape(batch_size * height * width, bands)
-        target_flat = target_material.reshape(batch_size * height * width, bands)
-
-        # Calcular normas
-        input_norm = torch.norm(input_flat, dim=1, keepdim=True)
-        target_norm = torch.norm(target_flat, dim=1, keepdim=True)
-
-        # Calcular producto punto
-        dot_product = torch.sum(input_flat * target_flat, dim=1, keepdim=True)
-
-        # Calcular ángulos y sumar
-        angles = torch.acos(dot_product / (input_norm * target_norm))
-        total_sad = torch.sum(angles)
-
-        return total_sad
+        return torch.sum(sad)
+    
 
 if __name__ == "__main__":
     sad = SADPixelwise()
