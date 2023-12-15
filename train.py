@@ -60,7 +60,7 @@ test_files = np.load('test_files.npy')
 dataset_train = LocalMatDataset(args.data_root, train_files)#, aug_transform=aug_transform)
 data_loader_train = DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True)
 dataset_test = LocalMatDataset(args.data_root, test_files)#, aug_transform=aug_transform_test)
-data_loader_test = DataLoader(dataset_test, batch_size=args.batch_size, shuffle=True)
+data_loader_test = DataLoader(dataset_test, batch_size=args.batch_size, shuffle=False)
 
 model = model_generator(args.method, args.pretrained_model_path).to(device)
 print('Parameters number is ', sum(param.numel() for param in model.parameters()))
@@ -114,13 +114,15 @@ def validate(model, data_loader, lossfunc):
 
     model.eval()
     running_loss = 0.0
+    torch.cuda.empty_cache()
     
-    for inputs, labels in tqdm(data_loader):
-        inputs = inputs.to(device)
-        labels = labels.to(device)
+    with torch.no_grad():
+        for inputs, labels in tqdm(data_loader):
+            inputs = inputs.to(device)
+            labels = labels.to(device)
 
-        outputs = model(inputs)
-        loss = lossfunc(outputs, labels) 
+            outputs = model(inputs)
+            loss = lossfunc(outputs, labels) 
 
     running_loss += loss.item() * inputs.size(0)
     
