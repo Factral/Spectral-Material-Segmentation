@@ -7,6 +7,7 @@ from PIL import Image
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from torch.utils.data import DataLoader
+from torchvision import transforms
 
 class LocalMatDataset(Dataset):
     def __init__(self, dir ,img_files, aug_transform=None):
@@ -21,17 +22,14 @@ class LocalMatDataset(Dataset):
         img_path = self.dir + "/images_resized/" +  self.img_files[idx]
         mask_path  = self.dir + "/materials_hs/" + self.img_files[idx].replace(".png", ".pt")
 
-        image = np.array(Image.open(img_path).convert('RGB'))
-        mask = np.array(torch.load(mask_path))
+        image = transforms.ToTensor()(Image.open(img_path).convert('RGB'))
+        mask = torch.load(mask_path)
 
         if self.transform:
             transformed = self.transform(image=image, mask=mask)
             image = transformed["image"]
             mask = transformed["mask"]
-        else:
-            image = torch.from_numpy(image)
 
-        print(mask.shape)
         return image, mask.permute(2,0,1).float()
     
 if __name__ == '__main__':

@@ -26,7 +26,7 @@ parser.add_argument("--batch_size", type=int, default=2, help="batch size")
 parser.add_argument("--epochs", type=int, default=300, help="number of epochs")
 parser.add_argument("--init_lr", type=float, default=4e-4, help="initial learning rate")
 parser.add_argument("--outf", type=str, default='./exp/mst_plus_plus/', help='path log files')
-parser.add_argument("--data_root", type=str, default='matbase')
+parser.add_argument("--data_root", type=str, default='/media/simulaciones/hdsp/data/matbase/')
 parser.add_argument("--patch_size", type=int, default=128, help="patch size")
 parser.add_argument("--stride", type=int, default=8, help="stride")
 parser.add_argument("--gpu_id", type=str, default='0', help='path log files')
@@ -38,7 +38,7 @@ args = parser.parse_args()
 #wandb.config.update(args)
 
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #torch.set_default_device(device)
 
 aug_transform = A.Compose([
@@ -57,9 +57,9 @@ aug_transform_test = A.Compose([
 train_files = np.load('train_files.npy')
 test_files = np.load('test_files.npy')
 
-dataset_train = LocalMatDataset(args.data_root, train_files, aug_transform=aug_transform)
+dataset_train = LocalMatDataset(args.data_root, train_files)#, aug_transform=aug_transform)
 data_loader_train = DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True)
-dataset_test = LocalMatDataset(args.data_root, test_files, aug_transform=aug_transform_test)
+dataset_test = LocalMatDataset(args.data_root, test_files)#, aug_transform=aug_transform_test)
 data_loader_test = DataLoader(dataset_test, batch_size=args.batch_size, shuffle=True)
 
 model = model_generator(args.method, args.pretrained_model_path).to(device)
@@ -82,21 +82,22 @@ if args.pretrained_model_path is not None and os.path.isfile(args.pretrained_mod
 
 def train(model, data_loader, optimizer, lossfunc):
     model.train()
-    acc = [0]
-    ce = [0]
+    scaler = torch.cuda.amp.GradScaler()
     running_loss = 0.0
     for inputs, labels in tqdm(data_loader):
         inputs = inputs.to(device)
         labels = labels.to(device)
 
         optimizer.zero_grad()
-        outputs = model(inputs)
+        with torch.cuda.amp.autocast(dtype=torch.float16):
+            outputs = model(inputs)
+            loss = lossfunc(outputs, labels) 
 
-
-        loss = lossfunc(outputs, labels) 
-
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        #loss.backward()
+        #optimizer.step()
 
         running_loss += loss.item() * inputs.size(0)
     
@@ -106,20 +107,19 @@ def train(model, data_loader, optimizer, lossfunc):
         #acc.append(acc_.item())
         #ce.append(ce_.item())
 
-    return epoch_loss, sum(acc)/len(acc) , sum(ce)/len(ce)
+    return epoch_loss
 
 
 def validate(model, data_loader, lossfunc):
-    acc = []
-    ce = []
+
     model.eval()
     running_loss = 0.0
     
     for inputs, labels in tqdm(data_loader):
         inputs = inputs.to(device)
         labels = labels.to(device)
-        outputs = model(inputs)
 
+        outputs = model(inputs)
         loss = lossfunc(outputs, labels) 
 
     running_loss += loss.item() * inputs.size(0)
@@ -131,51 +131,26 @@ def validate(model, data_loader, lossfunc):
     val_loss = running_loss / len(data_loader.dataset)
     scheduler.step(val_loss)
     
-    return val_loss, sum(acc)/len(acc) , sum(ce)/len(ce)
+    return val_loss
 
 
-best_val_ce = 1000
+best_val_ce = 1000000000000000
 for epoch in range(args.epochs):
     print(f'Epoch {epoch + 1}\n-------------------------------')
 
-    epoch_loss, train_acc, train_ce  = train(model, data_loader_train, optimizer, criterion)
-    val_loss, test_acc, test_ce = validate(model, data_loader_test, criterion)
+    epoch_loss  = train(model, data_loader_train, optimizer, criterion)
+    val_loss= validate(model, data_loader_test, criterion)
 
-    if test_ce < best_val_ce:
-        best_val_ce = test_ce
+    if val_loss < best_val_ce:
+        best_val_ce = val_loss
         torch.save(model, os.path.join(args.save_dir, args.exp_name+'_best_model.pth'))
         torch.save(model.state_dict(), os.path.join(args.save_dir, args.exp_name+'_best_weights.pth'))
         print("Best model saved with test CE: ", best_val_ce)
     
     print(f'Epoch {epoch} train loss: {epoch_loss:.4f}, val loss: {val_loss:.4f}')
-
+"""
     wandb.log({'epochs': epoch,
                 'lr': optimizer.param_groups[0]['lr'],
-                'train_loss': epoch_loss, 'val_loss': val_loss,
-                'train_acc': train_acc, 'train_ce': train_ce,
-                'test_acc': test_acc, 'test_ce': test_ce})
-
-
-
-# Validate
-def validate(val_loader, model):
-    model.eval()
-    losses_mrae = AverageMeter()
-    losses_rmse = AverageMeter()
-    losses_psnr = AverageMeter()
-    for i, (input, target) in enumerate(val_loader):
-        input = input.cuda()
-        target = target.cuda()
-        with torch.no_grad():
-            # compute output
-            output = model(input)
-            loss_mrae = criterion_mrae(output[:, :, 128:-128, 128:-128], target[:, :, 128:-128, 128:-128])
-            loss_rmse = criterion_rmse(output[:, :, 128:-128, 128:-128], target[:, :, 128:-128, 128:-128])
-            loss_psnr = criterion_psnr(output[:, :, 128:-128, 128:-128], target[:, :, 128:-128, 128:-128])
-        # record loss
-        losses_mrae.update(loss_mrae.data)
-        losses_rmse.update(loss_rmse.data)
-        losses_psnr.update(loss_psnr.data)
-    return losses_mrae.avg, losses_rmse.avg, losses_psnr.avg
-
+                'train_loss': epoch_loss, 'val_loss': val_loss})
+"""
 

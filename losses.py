@@ -28,20 +28,13 @@ class SADPixelwise(nn.Module):
             total_sad: Sum of SAD across all pixels
         """
 
-        try:
-            normalize_r = torch.norm(input, p=2, dim=3, keepdim=True)
-            normalize_g = torch.norm(target, p=2, dim=3, keepdim=True)
-            numerator = torch.sum(torch.mul(input, target), dim=3, keepdim=True)
+        normalize_r = torch.norm(input, p=2, dim=3)
+        normalize_g = torch.norm(target, p=2, dim=3)
+        numerator = torch.sum(torch.mul(input, target), dim=3)
 
-            elemnt = numerator / (normalize_r * normalize_g)
+        elemnt = numerator / (normalize_r * normalize_g)
 
-            sad = torch.acos(elemnt)
-
-
-        except ValueError:
-            return 0.0
-        
-        return torch.sum(sad)
+        return torch.sum(torch.acos(elemnt))
     
 
 if __name__ == "__main__":
