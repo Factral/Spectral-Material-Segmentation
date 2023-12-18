@@ -1,36 +1,11 @@
-from __future__ import division
 
 import torch
 import torch.nn as nn
-import logging
+
 import numpy as np
 import os
-
-class AverageMeter(object):
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-
-def initialize_logger(file_dir):
-    logger = logging.getLogger()
-    fhandler = logging.FileHandler(filename=file_dir, mode='a')
-    formatter = logging.Formatter('%(asctime)s - %(message)s', "%Y-%m-%d %H:%M:%S")
-    fhandler.setFormatter(formatter)
-    logger.addHandler(fhandler)
-    logger.setLevel(logging.INFO)
-    return logger
+import glob
+import spectral
 
 def save_checkpoint(model_path, epoch, iteration, model, optimizer):
     state = {
@@ -79,21 +54,33 @@ class Loss_PSNR(nn.Module):
         psnr = 10. * torch.log((data_range ** 2) / err) / np.log(10.)
         return torch.mean(psnr)
 
-def time2file_name(time):
-    year = time[0:4]
-    month = time[5:7]
-    day = time[8:10]
-    hour = time[11:13]
-    minute = time[14:16]
-    second = time[17:19]
-    time_filename = year + '_' + month + '_' + day + '_' + hour + '_' + minute + '_' + second
-    return time_filename
 
-def record_loss(loss_csv, epoch, iteration, epoch_time, lr, train_loss, test_loss):
-    """ Record many results."""
-    loss_csv.write('{},{},{},{},{},{}\n'.format(epoch, iteration, epoch_time, lr, train_loss, test_loss))
-    loss_csv.flush()
-    loss_csv.close
+category2code = {"asphalt": 0, "ceramic": 1, "concrete": 2, "fabric": 3, "foliage": 4, "food": 5, "glass": 6, "metal": 7, "paper": 8, "plaster": 9, "plastic": 10,"rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
 
+class HsiMaterial():
+    def __init__(self):
 
+        category2code = {"asphalt": 0, "ceramic": 1, "concrete": 2, "fabric": 3, "foliage": 4,
+                            "food": 5, "glass": 6, "metal": 7, "paper": 8, "plaster": 9, "plastic": 10,
+                            "rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
+        
+        materials = glob.glob('materials/*.npy')
+        self.materials = np.array([np.load(m) for m in materials])
+        self.code2material = {v: k for k, v in zip(materials, category2code.values())}
+        self.num_bands = 31
 
+    def convert(self, cube):
+        """
+        Convert a hyperspectral cube to a material cube
+
+        Params:
+            cube -> Hyperspectral cube (batch_size, height, width, 31)
+
+        Returns:
+            material_cube: Material cube (batch_size, height, width, 1)
+        """
+        assert cube.shape[-1] == self.num_bands
+
+        result_sam = spectral.algorithms.spectral_angles(cube, self.materials)
+
+        return result_sam
