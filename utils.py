@@ -64,7 +64,7 @@ class HsiMaterial():
                             "food": 5, "glass": 6, "metal": 7, "paper": 8, "plaster": 9, "plastic": 10,
                             "rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
         
-        materials = glob.glob('materials/*.npy')
+        materials = glob.glob('materials_numpy/*.npy')
         self.materials = np.array([np.load(m) for m in materials])
         self.code2material = {v: k for k, v in zip(materials, category2code.values())}
         self.num_bands = 31
@@ -79,8 +79,11 @@ class HsiMaterial():
         Returns:
             material_cube: Material cube (batch_size, height, width, 1)
         """
+        cube = cube.transpose(1,2,0)
+        print(cube.shape, self.materials.shape)
         assert cube.shape[-1] == self.num_bands
+
 
         result_sam = spectral.algorithms.spectral_angles(cube, self.materials)
 
-        return result_sam
+        return np.argmin(result_sam, axis=2)

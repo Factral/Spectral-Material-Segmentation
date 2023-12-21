@@ -19,12 +19,12 @@ import matplotlib
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from utils import HsiMaterial
-
+import sys
 
 parser = argparse.ArgumentParser(description="Spectral Recovery Toolbox")
 parser.add_argument('--method', type=str, default='mst_plus_plus')
 parser.add_argument('--pretrained_model_path', type=str, default="mst_plus_plus.pth")
-parser.add_argument("--batch_size", type=int, default=2, help="batch size")
+parser.add_argument("--batch_size", type=int, default=4, help="batch size")
 parser.add_argument("--epochs", type=int, default=300, help="number of epochs")
 parser.add_argument("--init_lr", type=float, default=4e-4, help="initial learning rate")
 parser.add_argument("--outf", type=str, default='./exp/mst_plus_plus/', help='path log files')
@@ -47,9 +47,12 @@ train_files = np.load('train_files.npy')
 test_files = np.load('test_files.npy')
 
 dataset_train = LocalMatDataset(args.data_root, train_files)#, aug_transform=aug_transform)
-data_loader_train = DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True)
+data_loader_train = DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True,
+ pin_memory=True, drop_last=True)
+
 dataset_test = LocalMatDataset(args.data_root, test_files)#, aug_transform=aug_transform_test)
-data_loader_test = DataLoader(dataset_test, batch_size=args.batch_size, shuffle=False)
+data_loader_test = DataLoader(dataset_test, batch_size=args.batch_size, shuffle=False
+, pin_memory=True)
 
 model = model_generator(args.method, args.pretrained_model_path).to(device)
 print('Parameters number is ', sum(param.numel() for param in model.parameters()))
@@ -75,14 +78,30 @@ def train(model, data_loader, optimizer, lossfunc):
         inputs = inputs.to(device)
         labels = labels.to(device)
 
+        inputs = Variable(inputs)
+        labels = Variable(labels)
+
         optimizer.zero_grad()
         with torch.cuda.amp.autocast(dtype=torch.float16):
             
             outputs = model(inputs)
             if torch.sum(torch.isnan(outputs)).item() != 0:
+                print(torch.sum(torch.isnan(outputs)).item())
+                print(inputs.shape)
+                print(labels.shape)
+                print(outputs.shape)
+                print(inputs.min(), inputs.max())
+                print(labels.min(), labels.max())
+
+            mask = (labels != 0).any(dim=1).int()
+            outputs = outputs * mask.unsqueeze(1)
+
+            if torch.sum(torch.isnan(outputs)).item() != 0:
                 print(inputs.shape)
                 print(inputs.min(), inputs.max())
                 print(labels.min(), labels.max())
+                sys.exit(0)
+
             loss = lossfunc(outputs, labels) 
 
         scaler.scale(loss).backward()
@@ -90,6 +109,7 @@ def train(model, data_loader, optimizer, lossfunc):
         scaler.update()
 
         running_loss += loss.item() * inputs.size(0)
+        
     
     epoch_loss = running_loss / len(data_loader.dataset)
 
@@ -99,11 +119,11 @@ def train(model, data_loader, optimizer, lossfunc):
     im = ax[1].imshow(gt)
     ax[1].set_title("Ground Truth")
 
-    pred = hsimaterial.convert(outputs[0].cpu().numpy())
+    pred = hsimaterial.convert(outputs[0].detach().cpu().numpy())
     im = ax[2].imshow(pred)
     ax[2].set_title("Prediction")
 
-    values = list(range(15))
+    values = np.unique(pred)
 
     colors = [ im.cmap(im.norm(value)) for value in values]
     aa = [ mpatches.Patch(color=colors[i], label=f"{list(materials.keys())[list(materials.values()).index(i+1)]}") for i in range(0,15) ]
@@ -127,7 +147,12 @@ def validate(model, data_loader, lossfunc):
             inputs = inputs.to(device)
             labels = labels.to(device)
 
+            inputs = Variable(inputs)
+            labels = Variable(labels)
+
             outputs = model(inputs)
+            mask = (outputs != 0).any(dim=1).int()
+            outputs = outputs * mask.unsqueeze(1)
             loss = lossfunc(outputs, labels) 
 
     running_loss += loss.item() * inputs.size(0)

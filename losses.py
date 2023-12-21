@@ -33,15 +33,17 @@ class SADPixelwise(nn.Module):
         normalize_r = torch.norm(input, p=2, dim=3)
         normalize_g = torch.norm(target, p=2, dim=3)
 
-        numerator = torch.sum(torch.mul(input, target), dim=3)
 
-        elemnt = numerator / ((normalize_r * normalize_g) + 1e-6)
+        #numerator = torch.sum(torch.mul(input, target), dim=3)
+        numerator =torch.einsum('ijkl,ijkl->ijk', input, target)
 
-        if torch.sum(torch.isnan(elemnt)).item() != 0:
+        if torch.sum(torch.isnan(numerator)).item() != 0 or torch.sum(torch.isnan(normalize_g)).item() != 0 or torch.sum(torch.isnan(normalize_r)).item() != 0:
             print(torch.sum(torch.isnan(input)).item(), "input")
             print(torch.sum(torch.isnan(target)).item(), "target")
             print(torch.sum(torch.isnan(numerator)).item(), "numerator")
-            print(torch.sum(torch.isnan(elemnt)).item(), "elemnt")
+
+        elemnt = numerator / ((normalize_r * normalize_g) + 1e-6)
+
 
         sad = torch.acos(elemnt)
 
