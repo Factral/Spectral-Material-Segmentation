@@ -7,6 +7,9 @@ import os
 import glob
 import spectral
 
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+
 def save_checkpoint(model_path, epoch, iteration, model, optimizer):
     state = {
         'epoch': epoch,
@@ -65,6 +68,8 @@ class HsiMaterial():
                             "rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
         
         materials = glob.glob('materials_numpy/*.npy')
+        materials = sorted(materials)
+
         self.materials = np.array([np.load(m) for m in materials])
         self.code2material = {v: k for k, v in zip(materials, category2code.values())}
         self.num_bands = 31
@@ -87,3 +92,28 @@ class HsiMaterial():
         result_sam = spectral.algorithms.spectral_angles(cube, self.materials)
 
         return np.argmin(result_sam, axis=2)
+    
+
+def make_plot(inputs, labels, outputs, mask, hsimaterial):
+    fig, ax = plt.subplots(1, 3, figsize=(10, 5))
+
+    gt = hsimaterial.convert(labels[0].cpu().numpy()) * mask[0].cpu().numpy()
+    im = ax[1].imshow(gt, vmin=0, vmax=15)
+    ax[1].set_title("Ground Truth")
+
+    pred = hsimaterial.convert(outputs[0].detach().cpu().numpy())
+    im = ax[2].imshow(pred , vmin=0, vmax=15)
+    ax[2].set_title("Prediction")
+
+    values = np.unique(pred)
+    print(values)
+
+    colors = [ im.cmap(im.norm(value)) for value in values]
+    aa = [ mpatches.Patch(color=colors[i], label=f"{list(category2code.keys())[list(category2code.values()).index(val)]}") for i,val in enumerate(values) ]
+
+    plt.legend(handles=aa, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.2)
+
+    im = ax[0].imshow(inputs[0].cpu().numpy().transpose(1,2,0))
+    ax[0].set_title("Input")
+
+    return fig

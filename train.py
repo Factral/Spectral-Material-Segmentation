@@ -12,19 +12,19 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt 
 from metrics import Metrics
 import wandb
-from losses import SADPixelwise
+from losses import SADPixelwise, Loss_MRAE
 import numpy as np
 import matplotlib.patches as mpatches
 import matplotlib 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-from utils import HsiMaterial
+from utils import HsiMaterial, make_plot
 import sys
 
 parser = argparse.ArgumentParser(description="Spectral Recovery Toolbox")
 parser.add_argument('--method', type=str, default='mst_plus_plus')
 parser.add_argument('--pretrained_model_path', type=str, default="mst_plus_plus.pth")
-parser.add_argument("--batch_size", type=int, default=4, help="batch size")
+parser.add_argument("--batch_size", type=int, default=14, help="batch size")
 parser.add_argument("--epochs", type=int, default=300, help="number of epochs")
 parser.add_argument("--init_lr", type=float, default=4e-4, help="initial learning rate")
 parser.add_argument("--outf", type=str, default='./exp/mst_plus_plus/', help='path log files')
@@ -63,7 +63,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patienc
 metrics = Metrics()
 cudnn.benchmark = True
 
-criterion = SADPixelwise(device=device)
+criterion = Loss_MRAE()#SADPixelwise(device=device)
 criterion = criterion.to(device)
 
 materials = {"asphalt": 0, "ceramic": 1, "concrete": 2, "fabric": 3, "foliage": 4, "food": 5, "glass": 6, "metal": 7, "paper": 8, "plaster": 9, "plastic": 10,"rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
@@ -74,7 +74,8 @@ def train(model, data_loader, optimizer, lossfunc):
     model.train()
     scaler = torch.cuda.amp.GradScaler()
     running_loss = 0.0
-    for inputs, labels in tqdm(data_loader):
+    steps = 500
+    for batch_idx, (inputs, labels, mask_png) in tqdm(enumerate(data_loader)):
         inputs = inputs.to(device)
         labels = labels.to(device)
 
@@ -83,24 +84,10 @@ def train(model, data_loader, optimizer, lossfunc):
 
         optimizer.zero_grad()
         with torch.cuda.amp.autocast(dtype=torch.float16):
-            
             outputs = model(inputs)
-            if torch.sum(torch.isnan(outputs)).item() != 0:
-                print(torch.sum(torch.isnan(outputs)).item())
-                print(inputs.shape)
-                print(labels.shape)
-                print(outputs.shape)
-                print(inputs.min(), inputs.max())
-                print(labels.min(), labels.max())
 
             mask = (labels != 0).any(dim=1).int()
             outputs = outputs * mask.unsqueeze(1)
-
-            if torch.sum(torch.isnan(outputs)).item() != 0:
-                print(inputs.shape)
-                print(inputs.min(), inputs.max())
-                print(labels.min(), labels.max())
-                sys.exit(0)
 
             loss = lossfunc(outputs, labels) 
 
@@ -109,29 +96,13 @@ def train(model, data_loader, optimizer, lossfunc):
         scaler.update()
 
         running_loss += loss.item() * inputs.size(0)
-        
-    
-    epoch_loss = running_loss / len(data_loader.dataset)
 
-    fig, ax = plt.subplots(1, 3, figsize=(10, 5))
-
-    gt = hsimaterial.convert(labels[0].cpu().numpy())
-    im = ax[1].imshow(gt)
-    ax[1].set_title("Ground Truth")
-
-    pred = hsimaterial.convert(outputs[0].detach().cpu().numpy())
-    im = ax[2].imshow(pred)
-    ax[2].set_title("Prediction")
-
-    values = np.unique(pred)
-
-    colors = [ im.cmap(im.norm(value)) for value in values]
-    aa = [ mpatches.Patch(color=colors[i], label=f"{list(materials.keys())[list(materials.values()).index(i+1)]}") for i in range(0,15) ]
-
-    plt.legend(handles=aa, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.2)
-
-    im = ax[0].imshow(inputs[0].cpu().numpy().transpose(1,2,0))
-    ax[0].set_title("Input")
+        if batch_idx % steps == 0:
+            fig = make_plot(inputs, outputs, labels, mask)
+                    
+            wandb.log({'step': batch_idx,
+                        'train_loss': running_loss,
+                        'train_fig': fig})
 
     return epoch_loss, fig
 
@@ -166,20 +137,21 @@ def validate(model, data_loader, lossfunc):
     
     return val_loss
 
+#best_val_ce = 1000000000000000
 
-best_val_ce = 1000000000000000
 for epoch in range(args.epochs):
     print(f'Epoch {epoch + 1}\n-------------------------------')
 
     epoch_loss,fig  = train(model, data_loader_train, optimizer, criterion)
-    val_loss= validate(model, data_loader_test, criterion)
+    #val_loss= validate(model, data_loader_test, criterion)
 
-    if val_loss < best_val_ce:
-        best_val_ce = val_loss
-        torch.save(model, os.path.join(args.save_dir, args.exp_name+'_best_model.pth'))
-        torch.save(model.state_dict(), os.path.join(args.save_dir, args.exp_name+'_best_weights.pth'))
-        print("Best model saved with test CE: ", best_val_ce)
-    
+
+    #if val_loss < best_val_ce:
+    #    best_val_ce = val_loss
+    #    torch.save(model, os.path.join(args.save_dir, args.exp_name+'_best_model.pth'))
+    #    torch.save(model.state_dict(), os.path.join(args.save_dir, args.exp_name+'_best_weights.pth'))
+    #    print("Best model saved with test CE: ", best_val_ce)
+    val_loss=0
     print(f'Epoch {epoch} train loss: {epoch_loss:.4f}, val loss: {val_loss:.4f}')
 
     wandb.log({'epochs': epoch,

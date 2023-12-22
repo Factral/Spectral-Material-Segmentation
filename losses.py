@@ -50,11 +50,12 @@ class SADPixelwise(nn.Module):
 
         return torch.sum(sad)
     
+class Loss_MRAE(nn.Module):
+    def __init__(self):
+        super(Loss_MRAE, self).__init__()
 
-if __name__ == "__main__":
-    sad = SADPixelwise()
-    input = torch.randn(1, 3, 3, 3)
-    target = torch.randn(1, 3, 3, 1)
-    loss = sad(input, target)
-    print(loss)
-    print(sad.code2material)
+    def forward(self, outputs, label):
+        assert outputs.shape == label.shape
+        error = torch.abs(outputs - label) / label
+        mrae = torch.mean(error.view(-1))
+        return mrae
