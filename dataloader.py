@@ -33,16 +33,13 @@ class LocalMatDataset(Dataset):
 
         img_path = self.dir + "/images_resized/" +  self.img_files[img_idx]
         mask_hs_path  = self.dir + "/materials_hs/" + self.img_files[img_idx].replace(".png", ".pt")
-        mask_png_path = self.dir + "/materials/" + self.img_files[img_idx]
-
 
         bgr = transforms.ToTensor()(Image.open(img_path).convert('RGB'))
         hyper = torch.load(mask_hs_path).float()
-        mask = np.array(Image.open(mask_png_path))
 
         bgr = bgr[:,h_idx*stride:h_idx*stride+crop_size, w_idx*stride:w_idx*stride+crop_size]
         hyper = hyper[:, h_idx * stride:h_idx * stride + crop_size,w_idx * stride:w_idx * stride + crop_size]
 
-        return np.ascontiguousarray(bgr.numpy()), np.ascontiguousarray(hyper.numpy()), np.ascontiguousarray(mask.numpy())
+        return np.ascontiguousarray(bgr.numpy()), np.ascontiguousarray(hyper.numpy())
 
     
