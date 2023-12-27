@@ -4,16 +4,14 @@ import torch.optim as optim
 import torch.backends.cudnn as cudnn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
-import os
 from dataloader import LocalMatDataset
 from architecture import *
 from tqdm import tqdm
-from metrics import Metrics
 import wandb
-from losses import SADPixelwise, Loss_MRAE
+from losses import SADPixelwise, Loss_MRAE, Loss_RMSE
 import numpy as np
 import albumentations as A
-from utils import HsiMaterial, make_plot
+from utils import HsiMaterial, make_plot_train, make_plot_val
 
 parser = argparse.ArgumentParser(description="Spectral Recovery Toolbox")
 parser.add_argument('--model', type=str, default='mst_plus_plus')
@@ -56,7 +54,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patienc
 #metrics = Metrics()
 cudnn.benchmark = True
 
-criterion = Loss_MRAE() #SADPixelwise(device=device)
+criterion = Loss_RMSE()#Loss_MRAE() #SADPixelwise(device=device)
 criterion = criterion.to(device)
 
 materials = {"asphalt": 0, "ceramic": 1, "concrete": 2, "fabric": 3, "foliage": 4, "food": 5, "glass": 6, "metal": 7, "paper": 8, "plaster": 9, "plastic": 10,"rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
@@ -66,9 +64,10 @@ hsimaterial = HsiMaterial()
 def train(model, data_loader, optimizer, lossfunc):
     model.train()
     scaler = torch.cuda.amp.GradScaler()
-    running_loss = 0.0
-    steps = 500
-    for batch_idx, (inputs, labels) in tqdm(enumerate(data_loader)):
+    running_loss = []
+    steps = 750
+    for batch_idx, (inputs, labels) in enumerate(tqdm(data_loader)):
+
         inputs = inputs.to(device)
         labels = labels.to(device)
 
@@ -82,20 +81,22 @@ def train(model, data_loader, optimizer, lossfunc):
             mask = (labels != 0).any(dim=1).int()
             outputs = outputs * mask.unsqueeze(1)
 
-            loss = lossfunc(outputs, labels) 
+            loss = lossfunc(outputs, labels)
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
 
-        running_loss += loss.item() * inputs.size(0)
+        running_loss.append(loss.item())
 
         if batch_idx % steps == 0:
-            fig = make_plot(inputs, outputs, labels, mask)
+            fig = make_plot_train(inputs, outputs, labels, mask)
                     
             wandb.log({'step': batch_idx,
-                        'train_loss': running_loss,
+                        'train_loss': sum(running_loss) / len(running_loss),
                         'train_fig': fig})
+
+    epoch_loss = sum(running_loss) / len(data_loader.dataset)
 
     return epoch_loss, fig
 
@@ -104,7 +105,6 @@ def validate(model, data_loader, lossfunc):
 
     model.eval()
     running_loss = 0.0
-    #torch.cuda.empty_cache()
     
     with torch.no_grad():
         for inputs, labels in tqdm(data_loader):
@@ -115,41 +115,31 @@ def validate(model, data_loader, lossfunc):
             labels = Variable(labels)
 
             outputs = model(inputs)
+
             mask = (outputs != 0).any(dim=1).int()
-            outputs = outputs * mask.unsqueeze(1)
-            loss = lossfunc(outputs, labels) 
+            outputs2 = outputs * mask.unsqueeze(1)
 
-    running_loss += loss.item() * inputs.size(0)
+            loss = lossfunc(outputs2, labels) 
+
+            running_loss += loss.item() * inputs.size(0)
     
-        #acc_, ce_ = metrics.all_metrics(outputs, labels)
-        #acc.append(acc_.item())
-        #ce.append(ce_.item())
-
     val_loss = running_loss / len(data_loader.dataset)
     scheduler.step(val_loss)
-    
-    return val_loss
 
-#best_val_ce = 1000000000000000
+    fig = make_plot_val(inputs, outputs, labels)
+
+    return val_loss, fig
 
 for epoch in range(args.epochs):
     print(f'Epoch {epoch + 1}\n-------------------------------')
 
-    epoch_loss,fig  = train(model, data_loader_train, optimizer, criterion)
-    #val_loss= validate(model, data_loader_test, criterion)
+    epoch_loss,fig_train  = train(model, data_loader_train, optimizer, criterion)
+    val_loss,fig_val= validate(model, data_loader_test, criterion)
 
-    #if val_loss < best_val_ce:
-    #    best_val_ce = val_loss
-    #    torch.save(model, os.path.join(args.save_dir, args.exp_name+'_best_model.pth'))
-    #    torch.save(model.state_dict(), os.path.join(args.save_dir, args.exp_name+'_best_weights.pth'))
-    #    print("Best model saved with test CE: ", best_val_ce)
+    wandb.log({'val_loss': val_loss,
+            'val_fig': fig_val,
+            'epoch': epoch})
 
-    val_loss=0
     print(f'Epoch {epoch} train loss: {epoch_loss:.4f}, val loss: {val_loss:.4f}')
-
-    wandb.log({'epochs': epoch,
-                'lr': optimizer.param_groups[0]['lr'],
-                'train_loss': epoch_loss, 'val_loss': val_loss,
-                'train_fig': fig})
 
 

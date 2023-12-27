@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 class LocalMatDataset(Dataset):
-    def __init__(self, dir ,img_files, aug_transform=None, stride=16):
+    def __init__(self, dir ,img_files, aug_transform=None, stride=128):
         self.dir = dir
         self.img_files = img_files
         self.transform = aug_transform
@@ -32,14 +32,17 @@ class LocalMatDataset(Dataset):
         h_idx, w_idx = patch_idx//self.patch_per_line, patch_idx%self.patch_per_line
 
         img_path = self.dir + "/images_resized/" +  self.img_files[img_idx]
-        mask_hs_path  = self.dir + "/materials_hs/" + self.img_files[img_idx].replace(".png", ".pt")
+        mask_hs_path  = self.dir + "materials_hs/" + self.img_files[img_idx].replace(".png", ".npy")
 
         bgr = transforms.ToTensor()(Image.open(img_path).convert('RGB'))
-        hyper = torch.load(mask_hs_path).float()
+        hyper = np.load(mask_hs_path).transpose(2,0,1)
+
+        
 
         bgr = bgr[:,h_idx*stride:h_idx*stride+crop_size, w_idx*stride:w_idx*stride+crop_size]
         hyper = hyper[:, h_idx * stride:h_idx * stride + crop_size,w_idx * stride:w_idx * stride + crop_size]
 
-        return np.ascontiguousarray(bgr.numpy()), np.ascontiguousarray(hyper.numpy())
+
+        return np.ascontiguousarray(bgr.numpy()), np.ascontiguousarray(hyper)
 
     

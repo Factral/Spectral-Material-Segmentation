@@ -70,7 +70,11 @@ class HsiMaterial():
         materials = glob.glob('materials_numpy/*.npy')
         materials = sorted(materials)
 
-        self.materials = np.array([np.load(m) for m in materials])
+
+        self.materials = np.zeros((len(materials), 31))
+        for i,m in enumerate(materials):
+            self.materials[i,:] = np.load(m)
+
         self.code2material = {v: k for k, v in zip(materials, category2code.values())}
         self.num_bands = 31
 
@@ -85,17 +89,17 @@ class HsiMaterial():
             material_cube: Material cube (batch_size, height, width, 1)
         """
         cube = cube.transpose(1,2,0)
-        print(cube.shape, self.materials.shape)
+        #print(cube.shape, self.materials.shape)
         assert cube.shape[-1] == self.num_bands
 
-
-        result_sam = spectral.algorithms.spectral_angles(cube, self.materials)
-
+        result_sam = spectral.algorithms.spectral_angles(cube, self.materials / 100)
         return np.argmin(result_sam, axis=2)
     
 
-def make_plot(inputs, labels, outputs, mask, hsimaterial):
+def make_plot_train(inputs, outputs, labels, mask):
     fig, ax = plt.subplots(1, 3, figsize=(10, 5))
+
+    hsimaterial = HsiMaterial()
 
     gt = hsimaterial.convert(labels[0].cpu().numpy()) * mask[0].cpu().numpy()
     im = ax[1].imshow(gt, vmin=0, vmax=15)
@@ -106,7 +110,7 @@ def make_plot(inputs, labels, outputs, mask, hsimaterial):
     ax[2].set_title("Prediction")
 
     values = np.unique(pred)
-    print(values)
+    #print(values)
 
     colors = [ im.cmap(im.norm(value)) for value in values]
     aa = [ mpatches.Patch(color=colors[i], label=f"{list(category2code.keys())[list(category2code.values()).index(val)]}") for i,val in enumerate(values) ]
@@ -117,3 +121,30 @@ def make_plot(inputs, labels, outputs, mask, hsimaterial):
     ax[0].set_title("Input")
 
     return fig
+
+
+def make_plot_val(inputs, outputs, labels):
+    fig, ax = plt.subplots(3, 3, figsize=(10, 5))
+
+    hsimaterial = HsiMaterial()
+
+    for i in range(3):
+        gt = hsimaterial.convert(labels[i].cpu().numpy())
+        im = ax[i,1].imshow(gt, vmin=0, vmax=15)
+        ax[i,1].set_title("Ground Truth")
+
+        pred = hsimaterial.convert(outputs[i].detach().cpu().numpy())
+        im = ax[i,2].imshow(pred , vmin=0, vmax=15)
+        ax[i,2].set_title("Prediction")
+
+        values = np.unique(pred)
+
+        colors = [ im.cmap(im.norm(value)) for value in values]
+        aa = [ mpatches.Patch(color=colors[i], label=f"{list(category2code.keys())[list(category2code.values()).index(val)]}") for i,val in enumerate(values) ]
+
+        plt.legend(handles=aa, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.2)
+
+        im = ax[i,0].imshow(inputs[i].cpu().numpy().transpose(1,2,0))
+        ax[i,0].set_title("Input")
+
+        return fig
