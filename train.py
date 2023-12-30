@@ -105,7 +105,7 @@ def train(model, data_loader, optimizer, lossfunc):
 def validate(model, data_loader, lossfunc):
 
     model.eval()
-    running_loss = 0.0
+    running_loss = []
     
     with torch.no_grad():
         for inputs, labels in tqdm(data_loader):
@@ -117,14 +117,14 @@ def validate(model, data_loader, lossfunc):
 
             outputs = model(inputs)
 
-            mask = (outputs != 0).any(dim=1).int()
+            mask = (labels != 255)
             outputs2 = outputs * mask.unsqueeze(1)
 
             loss = lossfunc(outputs2, labels) 
 
-            running_loss += loss.item() * inputs.size(0)
+            running_loss.append(loss.item())
     
-    val_loss = running_loss / len(data_loader.dataset)
+    val_loss = sum(running_loss) / len(running_loss)
     scheduler.step(val_loss)
 
     fig = make_plot_val(inputs, outputs, labels)

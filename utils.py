@@ -147,4 +147,4 @@ def make_plot_val(inputs, outputs, labels):
         im = ax[i,0].imshow(inputs[i].cpu().numpy().transpose(1,2,0))
         ax[i,0].set_title("Input")
 
-        return fig
+    return fig
