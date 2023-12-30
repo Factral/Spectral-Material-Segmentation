@@ -2,6 +2,7 @@ import torch
 import argparse
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from dataloader import LocalMatDataset
@@ -54,7 +55,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patienc
 #metrics = Metrics()
 cudnn.benchmark = True
 
-criterion = Loss_RMSE()#Loss_MRAE() #SADPixelwise(device=device)
+criterion = nn.CrossEntropyLoss() #Loss_RMSE()#Loss_MRAE() #SADPixelwise(device=device)
 criterion = criterion.to(device)
 
 materials = {"asphalt": 0, "ceramic": 1, "concrete": 2, "fabric": 3, "foliage": 4, "food": 5, "glass": 6, "metal": 7, "paper": 8, "plaster": 9, "plastic": 10,"rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
@@ -78,7 +79,7 @@ def train(model, data_loader, optimizer, lossfunc):
         with torch.cuda.amp.autocast(dtype=torch.float16):
             outputs = model(inputs)
 
-            mask = (labels != 0).any(dim=1).int()
+            mask = (labels != 255)
             outputs = outputs * mask.unsqueeze(1)
 
             loss = lossfunc(outputs, labels)

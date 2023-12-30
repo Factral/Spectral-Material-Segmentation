@@ -54,6 +54,43 @@ def lecun_normal_(tensor):
     variance_scaling_(tensor, mode='fan_in', distribution='truncated_normal')
 
 
+class SpectralAnglesLayer(nn.Module):
+    def __init__(self, eps=1e-6):
+        super(SpectralAnglesLayer, self).__init__()
+        self.eps = eps
+        self.members = nn.Parameter(torch.randn(15, 31))
+        torch.nn.init.xavier_uniform_(self.members)
+
+    def forward(self, data):
+        """
+        Args
+        ----
+        data: torch.Tensor
+            A tensor of shape (batch, channels, height, width)
+        """
+        # Normalize the members
+        m = self.members / (torch.sqrt(torch.einsum('ij,ij->i', self.members, self.members))[:, None] + self.eps)
+
+        # Reshape data to (batch, height*width, channels) for easier computation
+        batch, channels, height, width = data.shape
+        data = data.view(batch, channels, height * width).permute(0, 2, 1)
+
+        # Compute norms with epsilon
+        norms = torch.sqrt(torch.einsum('bij,bij->bi', data, data)) + self.eps
+
+        # Compute dot products
+        dots = torch.einsum('bij,mj->bim', data, m)
+
+        # Apply softmax to angles
+        dots = torch.clamp(dots / norms[:, :, None], -1 + self.eps, 1 + self.eps)
+
+        # Compute angles and permute back to (batch, members, height, width)
+        angles = -torch.acos(dots).permute(0, 2, 1).view(batch, -1, height, width)
+
+        return angles
+    
+
+
 class PreNorm(nn.Module):
     def __init__(self, dim, fn):
         super().__init__()
@@ -275,6 +312,7 @@ class MST_Plus_Plus(nn.Module):
         modules_body = [MST(dim=31, stage=2, num_blocks=[1,1,1]) for _ in range(stage)]
         self.body = nn.Sequential(*modules_body)
         self.conv_out = nn.Conv2d(n_feat, out_channels, kernel_size=3, padding=(3 - 1) // 2,bias=False)
+        self.sam = SpectralAnglesLayer()
 
     def forward(self, x):
         """
@@ -289,8 +327,12 @@ class MST_Plus_Plus(nn.Module):
         x = self.conv_in(x)
         h = self.body(x)
         h = self.conv_out(h)
+        
         h += x
-        return h[:, :, :h_inp, :w_inp]
+
+        h = h[:, :, :h_inp, :w_inp]
+        h = self.sam(h)
+        return h
 
 
 

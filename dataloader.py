@@ -32,10 +32,10 @@ class LocalMatDataset(Dataset):
         h_idx, w_idx = patch_idx//self.patch_per_line, patch_idx%self.patch_per_line
 
         img_path = self.dir + "/images_resized/" +  self.img_files[img_idx]
-        mask_hs_path  = self.dir + "materials_hs/" + self.img_files[img_idx].replace(".png", ".npy")
+        mask_hs_path  = self.dir + "masks_png/" + self.img_files[img_idx]
 
         bgr = transforms.ToTensor()(Image.open(img_path).convert('RGB'))
-        hyper = np.load(mask_hs_path).transpose(2,0,1)
+        hyper = transforms.ToTensor()(Image.open(mask_hs_path)) / 100.0
 
         
 
