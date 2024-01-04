@@ -29,9 +29,9 @@ parser.add_argument("--patch_size", type=int, default=128, help="patch size")
 parser.add_argument("--stride", type=int, default=8, help="stride")
 
 args = parser.parse_args()
-wandb.login(key='fe0119224af6709c85541483adf824cec731879e')
-wandb.init(project="material-segmentation", name=args.exp_name)
-wandb.config.update(args)
+#wandb.login(key='fe0119224af6709c85541483adf824cec731879e')
+#wandb.init(project="material-segmentation", name=args.exp_name)
+#wandb.config.update(args)
 
 device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 
@@ -55,7 +55,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patienc
 #metrics = Metrics()
 cudnn.benchmark = True
 
-criterion = nn.CrossEntropyLoss() #Loss_RMSE()#Loss_MRAE() #SADPixelwise(device=device)
+criterion = nn.CrossEntropyLoss(ignore_index=255) #Loss_RMSE()#Loss_MRAE() #SADPixelwise(device=device)
 criterion = criterion.to(device)
 
 materials = {"asphalt": 0, "ceramic": 1, "concrete": 2, "fabric": 3, "foliage": 4, "food": 5, "glass": 6, "metal": 7, "paper": 8, "plaster": 9, "plastic": 10,"rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
@@ -72,17 +72,16 @@ def train(model, data_loader, optimizer, lossfunc):
         inputs = inputs.to(device)
         labels = labels.to(device)
 
-        inputs = Variable(inputs)
-        labels = Variable(labels)
+        mask = (labels != 255)
+        if mask.sum() <= 31*10:
+            continue
 
         optimizer.zero_grad()
         with torch.cuda.amp.autocast(dtype=torch.float16):
             outputs = model(inputs)
-
-            mask = (labels != 255)
-            outputs = outputs * mask.unsqueeze(1)
-
-            loss = lossfunc(outputs, labels)
+            outputs = outputs * mask
+            print(labels.unique())
+            loss = lossfunc(outputs, labels.squeeze(1).long())
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -118,9 +117,9 @@ def validate(model, data_loader, lossfunc):
             outputs = model(inputs)
 
             mask = (labels != 255)
-            outputs2 = outputs * mask.unsqueeze(1)
+            outputs2 = outputs * mask
 
-            loss = lossfunc(outputs2, labels) 
+            loss = lossfunc(outputs2,  labels.squeeze(1).long()) 
 
             running_loss.append(loss.item())
     

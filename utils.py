@@ -10,6 +10,8 @@ import spectral
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
+import torch.nn.functional as F
+
 def save_checkpoint(model_path, epoch, iteration, model, optimizer):
     state = {
         'epoch': epoch,
@@ -99,52 +101,36 @@ class HsiMaterial():
 def make_plot_train(inputs, outputs, labels, mask):
     fig, ax = plt.subplots(1, 3, figsize=(10, 5))
 
-    hsimaterial = HsiMaterial()
+    ax[0].imshow(inputs[0].cpu().numpy().transpose(1,2,0))
+    ax[0].set_title("Input")
 
-    gt = hsimaterial.convert(labels[0].cpu().numpy()) * mask[0].cpu().numpy()
-    im = ax[1].imshow(gt, vmin=0, vmax=15)
+    ax[1].imshow(labels[0].cpu().numpy().squeeze(), vmin=0, vmax=15)
     ax[1].set_title("Ground Truth")
 
-    pred = hsimaterial.convert(outputs[0].detach().cpu().numpy())
-    im = ax[2].imshow(pred , vmin=0, vmax=15)
+    out = F.softmax(outputs[0], dim=1)
+    out = torch.argmax(out, dim=0)
+
+    ax[2].imshow(out.detach().cpu().numpy().squeeze(), vmin=0, vmax=15)
     ax[2].set_title("Prediction")
 
-    values = np.unique(pred)
-    #print(values)
 
-    colors = [ im.cmap(im.norm(value)) for value in values]
-    aa = [ mpatches.Patch(color=colors[i], label=f"{list(category2code.keys())[list(category2code.values()).index(val)]}") for i,val in enumerate(values) ]
-
-    plt.legend(handles=aa, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.2)
-
-    im = ax[0].imshow(inputs[0].cpu().numpy().transpose(1,2,0))
-    ax[0].set_title("Input")
 
     return fig
 
 
 def make_plot_val(inputs, outputs, labels):
-    fig, ax = plt.subplots(3, 3, figsize=(10, 5))
+    fig, ax = plt.subplots(1, 3, figsize=(10, 5))
 
-    hsimaterial = HsiMaterial()
+    ax[0].imshow(inputs[0].cpu().numpy().transpose(1,2,0))
+    ax[0].set_title("Input")
 
-    for i in range(3):
-        gt = hsimaterial.convert(labels[i].cpu().numpy())
-        im = ax[i,1].imshow(gt, vmin=0, vmax=15)
-        ax[i,1].set_title("Ground Truth")
+    ax[1].imshow(labels[0].cpu().numpy().squeeze(), vmin=0, vmax=15)
+    ax[1].set_title("Ground Truth")
 
-        pred = hsimaterial.convert(outputs[i].detach().cpu().numpy())
-        im = ax[i,2].imshow(pred , vmin=0, vmax=15)
-        ax[i,2].set_title("Prediction")
+    out = F.softmax(outputs[0], dim=1)
+    out = torch.argmax(out, dim=0)
 
-        values = np.unique(pred)
-
-        colors = [ im.cmap(im.norm(value)) for value in values]
-        aa = [ mpatches.Patch(color=colors[i], label=f"{list(category2code.keys())[list(category2code.values()).index(val)]}") for i,val in enumerate(values) ]
-
-        plt.legend(handles=aa, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.2)
-
-        im = ax[i,0].imshow(inputs[i].cpu().numpy().transpose(1,2,0))
-        ax[i,0].set_title("Input")
+    ax[2].imshow(out.detach().cpu().numpy().squeeze(), vmin=0, vmax=15)
+    ax[2].set_title("Prediction")
 
     return fig

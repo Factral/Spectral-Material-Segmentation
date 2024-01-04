@@ -35,14 +35,13 @@ class LocalMatDataset(Dataset):
         mask_hs_path  = self.dir + "masks_png/" + self.img_files[img_idx]
 
         bgr = transforms.ToTensor()(Image.open(img_path).convert('RGB'))
-        hyper = transforms.ToTensor()(Image.open(mask_hs_path)) / 100.0
+        hyper = np.expand_dims(np.array(Image.open(mask_hs_path)),0)
 
-        
-
+    
         bgr = bgr[:,h_idx*stride:h_idx*stride+crop_size, w_idx*stride:w_idx*stride+crop_size]
-        hyper = hyper[:, h_idx * stride:h_idx * stride + crop_size,w_idx * stride:w_idx * stride + crop_size]
+        hyper = hyper[:, h_idx * stride:h_idx * stride + crop_size,w_idx * stride:w_idx * stride + crop_size].astype(np.int64)
+  
 
-
-        return np.ascontiguousarray(bgr.numpy()), np.ascontiguousarray(hyper)
+        return bgr, torch.from_numpy(hyper)
 
     
