@@ -5,6 +5,8 @@ from einops import rearrange
 import math
 import warnings
 from torch.nn.init import _calculate_fan_in_and_fan_out
+import glob
+import numpy as np
 
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     def norm_cdf(x):
@@ -58,8 +60,11 @@ class SpectralAnglesLayer(nn.Module):
     def __init__(self, eps=1e-6):
         super(SpectralAnglesLayer, self).__init__()
         self.eps = eps
-        self.members = nn.Parameter(torch.randn(15, 31))
-        torch.nn.init.xavier_uniform_(self.members)
+        materials = glob.glob('materials_numpy/*.npy')
+        materials = [torch.from_numpy(np.load(m)).float() for m in materials]
+        materials = torch.stack(materials)
+        self.members = materials
+
 
     def forward(self, data):
         """

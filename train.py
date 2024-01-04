@@ -13,11 +13,12 @@ from losses import SADPixelwise, Loss_MRAE, Loss_RMSE
 import numpy as np
 import albumentations as A
 from utils import HsiMaterial, make_plot_train, make_plot_val
+from metrics import Metrics
 
 parser = argparse.ArgumentParser(description="Spectral Recovery Toolbox")
 parser.add_argument('--model', type=str, default='mst_plus_plus')
 parser.add_argument('--weights', type=str, default="mst_plus_plus.pth")
-parser.add_argument("--batch_size", type=int, default=14, help="batch size")
+parser.add_argument("--batch_size", type=int, default=16, help="batch size")
 parser.add_argument("--epochs", type=int, default=300, help="number of epochs")
 parser.add_argument("--init_lr", type=float, default=4e-4, help="initial learning rate")
 parser.add_argument("--outf", type=str, default='./exp/mst_plus_plus/', help='path log files')
@@ -36,14 +37,14 @@ args = parser.parse_args()
 device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 
 train_files = np.load('train_files.npy')
-test_files = np.load('test_files.npy')
+val_files = np.load('val_files.npy')
 
-dataset_train = LocalMatDataset(args.data_root, train_files)#, aug_transform=aug_transform)
+dataset_train = LocalMatDataset(args.data_root, train_files)
 data_loader_train = DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True,
  pin_memory=True, drop_last=True)
 
-dataset_test = LocalMatDataset(args.data_root, test_files)#, aug_transform=aug_transform_test)
-data_loader_test = DataLoader(dataset_test, batch_size=args.batch_size, shuffle=False
+dataset_test = LocalMatDataset(args.data_root, val_files)
+data_loader_test = DataLoader(dataset_test, batch_size=args.batch_size, shuffle=True
 , pin_memory=True)
 
 model = model_generator(args.model, args.weights).to(device)
@@ -52,10 +53,11 @@ print('Parameters number is ', sum(param.numel() for param in model.parameters()
 optimizer = optim.Adam(model.parameters(), lr=args.init_lr, betas=(0.9, 0.999))
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=15, factor=0.1, verbose=True)
 
-#metrics = Metrics()
+metric_train = Metrics('train')
+metric_test = Metrics('test')
 cudnn.benchmark = True
 
-criterion = nn.CrossEntropyLoss(ignore_index=255) #Loss_RMSE()#Loss_MRAE() #SADPixelwise(device=device)
+criterion = nn.CrossEntropyLoss(ignore_index=255)
 criterion = criterion.to(device)
 
 materials = {"asphalt": 0, "ceramic": 1, "concrete": 2, "fabric": 3, "foliage": 4, "food": 5, "glass": 6, "metal": 7, "paper": 8, "plaster": 9, "plastic": 10,"rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
@@ -80,7 +82,6 @@ def train(model, data_loader, optimizer, lossfunc):
         with torch.cuda.amp.autocast(dtype=torch.float16):
             outputs = model(inputs)
             outputs = outputs * mask
-            print(labels.unique())
             loss = lossfunc(outputs, labels.squeeze(1).long())
 
         scaler.scale(loss).backward()
@@ -89,14 +90,22 @@ def train(model, data_loader, optimizer, lossfunc):
 
         running_loss.append(loss.item())
 
+        pred = nn.functional.softmax(outputs, dim=1)
+        print(pred.argmax(1).shape)
+        metric_train.update(pred.argmax(1), labels.squeeze(1).long())
+
         if batch_idx % steps == 0:
             fig = make_plot_train(inputs, outputs, labels, mask)
+
+            _ , acc = metric_train.compute()
                     
             wandb.log({'step': batch_idx,
                         'train_loss': sum(running_loss) / len(running_loss),
-                        'train_fig': fig})
+                        'train_fig': fig, 
+                        'avg_acc': acc})
 
     epoch_loss = sum(running_loss) / len(data_loader.dataset)
+    metric_train.reset()
 
     return epoch_loss, fig
 
