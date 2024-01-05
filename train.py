@@ -14,11 +14,12 @@ import numpy as np
 import albumentations as A
 from utils import HsiMaterial, make_plot_train, make_plot_val
 from metrics import Metrics
+from architecture.unet import UNetWithResnet50Encoder
 
 parser = argparse.ArgumentParser(description="Spectral Recovery Toolbox")
 parser.add_argument('--model', type=str, default='mst_plus_plus')
 parser.add_argument('--weights', type=str, default="mst_plus_plus.pth")
-parser.add_argument("--batch_size", type=int, default=16, help="batch size")
+parser.add_argument("--batch_size", type=int, default=8, help="batch size")
 parser.add_argument("--epochs", type=int, default=300, help="number of epochs")
 parser.add_argument("--init_lr", type=float, default=4e-4, help="initial learning rate")
 parser.add_argument("--outf", type=str, default='./exp/mst_plus_plus/', help='path log files')
@@ -30,9 +31,9 @@ parser.add_argument("--patch_size", type=int, default=128, help="patch size")
 parser.add_argument("--stride", type=int, default=8, help="stride")
 
 args = parser.parse_args()
-#wandb.login(key='fe0119224af6709c85541483adf824cec731879e')
-#wandb.init(project="material-segmentation", name=args.exp_name)
-#wandb.config.update(args)
+wandb.login(key='fe0119224af6709c85541483adf824cec731879e')
+wandb.init(project="material-segmentation", name=args.exp_name)
+wandb.config.update(args)
 
 device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 
@@ -44,17 +45,22 @@ data_loader_train = DataLoader(dataset_train, batch_size=args.batch_size, shuffl
  pin_memory=True, drop_last=True)
 
 dataset_test = LocalMatDataset(args.data_root, val_files)
-data_loader_test = DataLoader(dataset_test, batch_size=args.batch_size, shuffle=True
+data_loader_test = DataLoader(dataset_test, batch_size=args.batch_size, shuffle=False
 , pin_memory=True)
 
-model = model_generator(args.model, args.weights).to(device)
+#args.weights
+#model = model_generator(args.model).to(device)
+model = UNetWithResnet50Encoder(31).to(device)
+
 print('Parameters number is ', sum(param.numel() for param in model.parameters()))
 
 optimizer = optim.Adam(model.parameters(), lr=args.init_lr, betas=(0.9, 0.999))
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=15, factor=0.1, verbose=True)
 
 metric_train = Metrics('train')
+metric_train.to(device)
 metric_test = Metrics('test')
+metric_test.to(device)
 cudnn.benchmark = True
 
 criterion = nn.CrossEntropyLoss(ignore_index=255)
@@ -74,28 +80,28 @@ def train(model, data_loader, optimizer, lossfunc):
         inputs = inputs.to(device)
         labels = labels.to(device)
 
-        mask = (labels != 255)
-        if mask.sum() <= 31*10:
-            continue
-
         optimizer.zero_grad()
         with torch.cuda.amp.autocast(dtype=torch.float16):
             outputs = model(inputs)
-            outputs = outputs * mask
+
+            if torch.isnan(outputs).any():
+                print(sum(torch.isnan(outputs).view(-1)))
+            
             loss = lossfunc(outputs, labels.squeeze(1).long())
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
 
+
         running_loss.append(loss.item())
 
-        pred = nn.functional.softmax(outputs, dim=1)
-        print(pred.argmax(1).shape)
-        metric_train.update(pred.argmax(1), labels.squeeze(1).long())
+        with torch.no_grad():
+            pred = nn.functional.softmax(outputs, dim=1)
+            metric_train.update(pred.argmax(1), labels.squeeze(1).long())
 
         if batch_idx % steps == 0:
-            fig = make_plot_train(inputs, outputs, labels, mask)
+            fig = make_plot_train(inputs, outputs, labels)
 
             _ , acc = metric_train.compute()
                     
@@ -125,10 +131,7 @@ def validate(model, data_loader, lossfunc):
 
             outputs = model(inputs)
 
-            mask = (labels != 255)
-            outputs2 = outputs * mask
-
-            loss = lossfunc(outputs2,  labels.squeeze(1).long()) 
+            loss = lossfunc(outputs,  labels.squeeze(1).long()) 
 
             running_loss.append(loss.item())
     

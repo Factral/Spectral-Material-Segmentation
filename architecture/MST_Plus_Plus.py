@@ -57,13 +57,18 @@ def lecun_normal_(tensor):
 
 
 class SpectralAnglesLayer(nn.Module):
-    def __init__(self, eps=1e-6):
+    def __init__(self, eps=1e-5):
         super(SpectralAnglesLayer, self).__init__()
         self.eps = eps
-        materials = glob.glob('materials_numpy/*.npy')
-        materials = [torch.from_numpy(np.load(m)).float() for m in materials]
-        materials = torch.stack(materials)
-        self.members = materials
+        materials_path = glob.glob('materials_numpy/*.npy')
+        materials_path = sorted(materials_path)
+
+        materials = np.zeros((16, 31))
+        for i,m in enumerate(materials_path):
+            materials[i,:] = np.load(m)
+            print(i)
+
+        self.members = torch.from_numpy(materials).cuda().float()
 
 
     def forward(self, data):
@@ -74,11 +79,15 @@ class SpectralAnglesLayer(nn.Module):
             A tensor of shape (batch, channels, height, width)
         """
         # Normalize the members
+        if torch.isnan(data).any():
+            print(sum(torch.isnan(data).contiguous().view(-1)), "grave")
+            
+
         m = self.members / (torch.sqrt(torch.einsum('ij,ij->i', self.members, self.members))[:, None] + self.eps)
 
         # Reshape data to (batch, height*width, channels) for easier computation
         batch, channels, height, width = data.shape
-        data = data.view(batch, channels, height * width).permute(0, 2, 1)
+        data = data.contiguous().view(batch, channels, height * width).permute(0, 2, 1)
 
         # Compute norms with epsilon
         norms = torch.sqrt(torch.einsum('bij,bij->bi', data, data)) + self.eps
@@ -90,7 +99,7 @@ class SpectralAnglesLayer(nn.Module):
         dots = torch.clamp(dots / norms[:, :, None], -1 + self.eps, 1 + self.eps)
 
         # Compute angles and permute back to (batch, members, height, width)
-        angles = -torch.acos(dots).permute(0, 2, 1).view(batch, -1, height, width)
+        angles = -torch.acos(dots).permute(0, 2, 1).contiguous().view(batch, -1, height, width)
 
         return angles
     

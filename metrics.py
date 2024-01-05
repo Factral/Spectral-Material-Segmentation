@@ -1,22 +1,26 @@
 import torch
 from torchmetrics import ConfusionMatrix
+import numpy as np
 
 class Metrics:  
     def __init__(self, pre_fix):
-        self.confmat = ConfusionMatrix(num_classes=16, ignore_index=255)
+        self.confmat = ConfusionMatrix(task="MULTICLASS", num_classes=16, ignore_index=255)
         self.segment_evaluator = SegmentEvaluator(is_sparse=False, categories=None)        
         self.pre_fix = pre_fix
 
     def compute(self):
         confmatrix = self.confmat.compute()
-        _ , acc , _ , _ = self.segment_evaluator(confmatrix, pre_fix=self.pre_fix, verbose=True)
-        return confmatrix, acc
+        _ , _ , acc , _, _ = self.segment_evaluator(confmatrix, pre_fix=self.pre_fix, verbose=True)
+        return confmatrix, np.array(acc).item()
     
     def update(self, pred, label):
         self.confmat.update(pred, label)
     
     def reset(self):
         self.confmat.reset()
+
+    def to(self, device):
+        self.confmat.to(device)
 
 def nanmean(v, *args, inplace=True, **kwargs):
     """
