@@ -9,12 +9,13 @@ from dataloader import LocalMatDataset
 from architecture import *
 from tqdm import tqdm
 import wandb
-from losses import SADPixelwise, Loss_MRAE, Loss_RMSE
+from losses import SADPixelwise, Loss_MRAE, Loss_RMSE, FocalLoss
 import numpy as np
 import albumentations as A
 from utils import HsiMaterial, make_plot_train, make_plot_val
 from metrics import Metrics
 from architecture.unet import UNetWithResnet50Encoder
+
 
 parser = argparse.ArgumentParser(description="Spectral Recovery Toolbox")
 parser.add_argument('--model', type=str, default='mst_plus_plus')
@@ -63,7 +64,8 @@ metric_test = Metrics('test')
 metric_test.to(device)
 cudnn.benchmark = True
 
-criterion = nn.CrossEntropyLoss(ignore_index=255)
+#criterion = nn.CrossEntropyLoss(ignore_index=255)
+criterion = FocalLoss(gamma=3, ignore_index=255)
 criterion = criterion.to(device)
 
 materials = {"asphalt": 0, "ceramic": 1, "concrete": 2, "fabric": 3, "foliage": 4, "food": 5, "glass": 6, "metal": 7, "paper": 8, "plaster": 9, "plastic": 10,"rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
