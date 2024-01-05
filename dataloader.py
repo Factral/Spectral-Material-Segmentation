@@ -27,26 +27,26 @@ class LocalMatDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        stride = self.stride
-        crop_size = self.crop_size
-        img_idx, patch_idx = idx//self.patch_per_img, idx%self.patch_per_img
-        h_idx, w_idx = patch_idx//self.patch_per_line, patch_idx%self.patch_per_line
+        #stride = self.stride
+        #crop_size = self.crop_size
+        #img_idx, patch_idx = idx//self.patch_per_img, idx%self.patch_per_img
+        #h_idx, w_idx = patch_idx//self.patch_per_line, patch_idx%self.patch_per_line
 
-        img_path = self.dir + "/images_resized/" +  self.img_files[img_idx]
-        mask_hs_path  = self.dir + "masks_png/" + self.img_files[img_idx]
+        img_path = self.dir + "/images_resized/" +  self.img_files[idx]
+        mask_hs_path  = self.dir + "masks_png/" + self.img_files[idx]
 
         bgr = transforms.ToTensor()(Image.open(img_path).convert('RGB'))
         mask = np.expand_dims(np.array(Image.open(mask_hs_path)),0)
 
 
-        bgr = bgr[:,h_idx*stride:h_idx*stride+crop_size, w_idx*stride:w_idx*stride+crop_size]
-        mask2 = mask[:, h_idx * stride:h_idx * stride + crop_size,w_idx * stride:w_idx * stride + crop_size].astype(np.int64)
+        #bgr = bgr[:,h_idx*stride:h_idx*stride+crop_size, w_idx*stride:w_idx*stride+crop_size]
+        #mask2 = mask[:, h_idx * stride:h_idx * stride + crop_size,w_idx * stride:w_idx * stride + crop_size].astype(np.int64)
   
-        while np.all(mask2 == 255):
-            patch_idx = np.random.randint(0, self.patch_per_img)
-            h_idx, w_idx = patch_idx // self.patch_per_line, patch_idx % self.patch_per_line
-            mask2 = mask[:, h_idx * stride:h_idx * stride + crop_size,w_idx * stride:w_idx * stride + crop_size].astype(np.int64)
+        #while np.all(mask2 == 255):
+        #    patch_idx = np.random.randint(0, self.patch_per_img)
+        #    h_idx, w_idx = patch_idx // self.patch_per_line, patch_idx % self.patch_per_line
+        #    mask2 = mask[:, h_idx * stride:h_idx * stride + crop_size,w_idx * stride:w_idx * stride + crop_size].astype(np.int64)
 
-        return bgr, torch.from_numpy(mask2)
+        return bgr, torch.from_numpy(mask)
 
     
