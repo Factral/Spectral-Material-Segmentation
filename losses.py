@@ -183,4 +183,4 @@ class FocalLoss(nn.Module):
             loss = torch.tensor(loss) * count
             loss = loss.sum() / count.sum()
 
-            return loss, count.sum()
+            return loss

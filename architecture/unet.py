@@ -19,8 +19,7 @@ class SpectralAnglesLayer(nn.Module):
             materials[i,:] = np.load(m)
             print(i)
 
-        self.members = torch.from_numpy(materials).cuda().float()
-
+        self.members = nn.Parameter(torch.from_numpy(materials)).cuda().float()
 
     def forward(self, data):
         """

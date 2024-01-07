@@ -15,12 +15,12 @@ import albumentations as A
 from utils import HsiMaterial, make_plot_train, make_plot_val
 from metrics import Metrics
 from architecture.unet import UNetWithResnet50Encoder
-
+import segmentation_models_pytorch.losses as losses
 
 parser = argparse.ArgumentParser(description="Spectral Recovery Toolbox")
 parser.add_argument('--model', type=str, default='mst_plus_plus')
 parser.add_argument('--weights', type=str, default="mst_plus_plus.pth")
-parser.add_argument("--batch_size", type=int, default=8, help="batch size")
+parser.add_argument("--batch_size", type=int, default=16, help="batch size")
 parser.add_argument("--epochs", type=int, default=300, help="number of epochs")
 parser.add_argument("--init_lr", type=float, default=4e-4, help="initial learning rate")
 parser.add_argument("--outf", type=str, default='./exp/mst_plus_plus/', help='path log files')
@@ -65,7 +65,7 @@ metric_test.to(device)
 cudnn.benchmark = True
 
 #criterion = nn.CrossEntropyLoss(ignore_index=255)
-criterion = FocalLoss(gamma=3, ignore_index=255)
+criterion =  losses.FocalLoss("multiclass", ignore_index=255, gamma=3) #FocalLoss(gamma=3, ignore=255)
 criterion = criterion.to(device)
 
 materials = {"asphalt": 0, "ceramic": 1, "concrete": 2, "fabric": 3, "foliage": 4, "food": 5, "glass": 6, "metal": 7, "paper": 8, "plaster": 9, "plastic": 10,"rubber": 11, "soil": 12, "stone": 13, "water": 14, "wood": 15}
@@ -83,6 +83,7 @@ def train(model, data_loader, optimizer, lossfunc):
         labels = labels.to(device)
 
         optimizer.zero_grad()
+        #model.sam.members.clamp_(0, 1)
         with torch.cuda.amp.autocast(dtype=torch.float16):
             outputs = model(inputs)
 
@@ -95,12 +96,14 @@ def train(model, data_loader, optimizer, lossfunc):
         scaler.step(optimizer)
         scaler.update()
 
+        
 
         running_loss.append(loss.item())
 
         with torch.no_grad():
             pred = nn.functional.softmax(outputs, dim=1)
             metric_train.update(pred.argmax(1), labels.squeeze(1).long())
+            model.sam.members.clamp_(0, 1)
 
         if batch_idx % steps == 0:
             fig = make_plot_train(inputs, outputs, labels)
