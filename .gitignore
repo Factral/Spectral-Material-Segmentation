@@ -4,3 +4,12 @@ __pycache__/
 wandb/
 materials/*
 materials_torch.zip
+
+
+dms_dataset/DMS_v1/images/*
+dms_dataset/DMS_v1/images_resized/*
+dms_dataset/DMS_v1/labels/*
+dms_dataset/DMS_v1/labels_resized/*
+dms_dataset/DMS_v1/RGB/*
+
+

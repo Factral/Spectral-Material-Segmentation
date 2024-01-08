@@ -74,12 +74,13 @@ def download_one_image(bucket, img_path, url, split, image_id, download_folder, 
     return None
   try:
     bucket.download_file(f'{split}/{image_id}.jpg',
-                         os.path.join(download_folder, original_name))
+                         os.path.join(download_folder + "/images/", original_name))
     return image_id
   except botocore.exceptions.ClientError as exception:
     try:
       # download directly from the original url using requests
-      urllib.request.urlretrieve(url, os.path.join(download_folder, original_name))
+      urllib.request.urlretrieve(url, os.path.join(download_folder + "/images/", original_name))
+
       return image_id
     except Exception as exception:
       if verbose:
@@ -98,8 +99,10 @@ def download_all_images(args):
   verbose = args['verbose']
 
   data_path = args['data_path']
+  print(data_path, 'info.json.gz')
+  print(os.getcwd())
   data = json.loads(
-      gzip.open(os.path.join(data_path, 'info.json.gz'), 'rb').read()
+      gzip.open("./"+os.path.join(data_path, 'info.json.gz'), 'rb').read()
   )
   
   split = []
@@ -114,6 +117,8 @@ def download_all_images(args):
 
   if not os.path.exists(download_folder):
     os.makedirs(download_folder)
+
+  os.makedirs(download_folder + '/images', exist_ok=True)
 
   downloaded_images = []
   errored_images = []
@@ -170,7 +175,7 @@ if __name__ == '__main__':
   parser.add_argument(
       '--data_path',
       type=str,
-      default='/DMS_v1',
+      default='./DMS_v1',
       help=('Filename that contains the split + image IDs of the images to '
             'download. Check the document'))
   parser.add_argument(
@@ -181,14 +186,15 @@ if __name__ == '__main__':
   parser.add_argument(
       '--download_folder',
       type=str,
-      default='/DMS_v1',
+      default='./DMS_v1',
       help='Folder where to download the images.')
   parser.add_argument('--verbose', type=bool, default=False, help='Verbose output.')
 
-  url = 'https://docs-assets.developer.apple.com/ml-research/datasets/dms/dms_v1_labels.zip'
-  filename = 'dms_v1_labels.zip'
-  urllib.request.urlretrieve(url, filename)
-  os.system('unzip dms_v1_labels.zip')
+  if not os.path.exists('./DMS_v1'):
+    url = 'https://docs-assets.developer.apple.com/ml-research/datasets/dms/dms_v1_labels.zip'
+    filename = 'dms_v1_labels.zip'
+    urllib.request.urlretrieve(url, filename)
+    os.system('unzip dms_v1_labels.zip')
 
 
   download_all_images(vars(parser.parse_args()))
