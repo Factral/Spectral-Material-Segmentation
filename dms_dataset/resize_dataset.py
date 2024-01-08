@@ -24,6 +24,7 @@ for image_path in glob.glob('DMS_v1/images/train/*.jpg'):
     label_path = image_path.replace('images', 'labels')
     label_path = label_path.replace('jpg', 'png')
     print(label_path)
+
     label = cv2.imread(label_path)
     resized_label = cv2.resize(label, desired_size, interpolation=cv2.INTER_NEAREST)
-    cv2.imwrite(f'DMS_v1/labels_resized/{base_name}', resized_label)
+    cv2.imwrite(f'DMS_v1/labels_resized/{base_name.replace("jpg", "png")}', resized_label)

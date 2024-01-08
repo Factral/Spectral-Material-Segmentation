@@ -11,15 +11,16 @@ class SpectralAnglesLayer(nn.Module):
     def __init__(self, eps=1e-5):
         super(SpectralAnglesLayer, self).__init__()
         self.eps = eps
-        materials_path = glob.glob('materials_numpy/*.npy')
-        materials_path = sorted(materials_path)
+        #materials_path = glob.glob('materials_numpy/*.npy')
+        #materials_path = sorted(materials_path)
 
-        materials = np.zeros((16, 31))
-        for i,m in enumerate(materials_path):
-            materials[i,:] = np.load(m)
-            print(i)
+        #materials = np.zeros((46, 31))
+        #for i,m in enumerate(materials_path):
+        #    materials[i,:] = np.load(m)
+        #    print(i)
 
-        self.members = nn.Parameter(torch.from_numpy(materials)).cuda().float()
+        #self.members = nn.Parameter(torch.from_numpy(materials)).cuda().float()
+        self.members = nn.Parameter(torch.rand(46, 31)).cuda().float()
 
     def forward(self, data):
         """

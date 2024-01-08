@@ -5,7 +5,7 @@ import torch.backends.cudnn as cudnn
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
-from dataloader import LocalMatDataset
+from dataloader import LocalMatDataset, DmsDataset
 from architecture import *
 from tqdm import tqdm
 import wandb
@@ -32,24 +32,24 @@ parser.add_argument("--patch_size", type=int, default=128, help="patch size")
 parser.add_argument("--stride", type=int, default=8, help="stride")
 
 args = parser.parse_args()
-wandb.login(key='fe0119224af6709c85541483adf824cec731879e')
-wandb.init(project="material-segmentation", name=args.exp_name)
-wandb.config.update(args)
+#wandb.login(key='fe0119224af6709c85541483adf824cec731879e')
+#wandb.init(project="material-segmentation", name=args.exp_name)
+#wandb.config.update(args)
 
 device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 
-train_files = np.load('train_files.npy')
-val_files = np.load('val_files.npy')
+train_files = np.load('split_data/train_files.npy')
+val_files = np.load('split_data/val_files.npy')
 
-dataset_train = LocalMatDataset(args.data_root, train_files)
+dataset_train = DmsDataset(args.data_root, train_files)
 data_loader_train = DataLoader(dataset_train, batch_size=args.batch_size, shuffle=True,
  pin_memory=True, drop_last=True)
 
-dataset_test = LocalMatDataset(args.data_root, val_files)
+dataset_test = DmsDataset(args.data_root, val_files)
 data_loader_test = DataLoader(dataset_test, batch_size=args.batch_size, shuffle=False
 , pin_memory=True)
 
-#args.weights
+#args.weights 
 #model = model_generator(args.model).to(device)
 model = UNetWithResnet50Encoder(31).to(device)
 
@@ -83,7 +83,7 @@ def train(model, data_loader, optimizer, lossfunc):
         labels = labels.to(device)
 
         optimizer.zero_grad()
-        #model.sam.members.clamp_(0, 1)
+        model.sam.members.clamp_(0, 1)
         with torch.cuda.amp.autocast(dtype=torch.float16):
             outputs = model(inputs)
 
