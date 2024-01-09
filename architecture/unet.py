@@ -179,6 +179,8 @@ class UNetWithResnet50Encoder(nn.Module):
             self.load_state_dict(torch.load(load_weights))
         self.sam = SpectralAnglesLayer()
 
+        self.sigmoid = nn.Sigmoid()
+
 
     def forward(self, x, with_output_feature_map=False):
         pre_pools = dict()
@@ -211,10 +213,11 @@ class UNetWithResnet50Encoder(nn.Module):
 
         del pre_pools
         if with_output_feature_map:
-            if self.softmax:
+            if self.softmax:    
                 return F.softmax(x, dim=1), output_feature_map
             return x, output_feature_map
         else:
+            x = self.sigmoid(x)
             x = self.sam(x)
             return x
 

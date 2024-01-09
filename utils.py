@@ -105,14 +105,14 @@ def make_plot_train(inputs, outputs, labels):
     ax[0].set_title("Input")
 
     print(labels[0].cpu().unique())
-    ax[1].imshow(labels[0].cpu().numpy().squeeze(), vmin=0, vmax=15)
+    ax[1].imshow(labels[0].cpu().numpy().squeeze(), vmin=0, vmax=46)
     ax[1].set_title("Ground Truth")
 
     out = F.softmax(outputs[0], dim=1)
     out = torch.argmax(out, dim=0)
 
     print(out.detach().cpu().unique())
-    ax[2].imshow(out.detach().cpu().numpy().squeeze(), vmin=0, vmax=15)
+    ax[2].imshow(out.detach().cpu().numpy().squeeze(), vmin=0, vmax=46)
     ax[2].set_title("Prediction")
 
 
@@ -126,13 +126,13 @@ def make_plot_val(inputs, outputs, labels):
     ax[0].imshow(inputs[0].cpu().numpy().transpose(1,2,0))
     ax[0].set_title("Input")
 
-    ax[1].imshow(labels[0].cpu().numpy().squeeze(), vmin=0, vmax=15)
+    ax[1].imshow(labels[0].cpu().numpy().squeeze(), vmin=0, vmax=46)
     ax[1].set_title("Ground Truth")
 
     out = F.softmax(outputs[0], dim=1)
     out = torch.argmax(out, dim=0)
 
-    ax[2].imshow(out.detach().cpu().numpy().squeeze(), vmin=0, vmax=15)
+    ax[2].imshow(out.detach().cpu().numpy().squeeze(), vmin=0, vmax=46)
     ax[2].set_title("Prediction")
 
     return fig

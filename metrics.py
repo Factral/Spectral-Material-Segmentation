@@ -1,77 +1,41 @@
 import torch
-from torchmetrics import ConfusionMatrix
+from torchmetrics.classification import MulticlassConfusionMatrix
 import numpy as np
+from sklearn.metrics import confusion_matrix as sklearn_confusion_matrix
 
 class Metrics:  
     def __init__(self, pre_fix):
-        self.confmat = ConfusionMatrix(task="MULTICLASS", num_classes=16, ignore_index=255)
-        self.segment_evaluator = SegmentEvaluator(is_sparse=False, categories=None)        
         self.pre_fix = pre_fix
+        self.confusion_matrix = np.zeros((46, 46))     
+        self.ignore_index = 255
 
     def compute(self):
-        confmatrix = self.confmat.compute()
-        _ , _ , acc , _, _ = self.segment_evaluator(confmatrix, pre_fix=self.pre_fix, verbose=True)
-        return confmatrix, np.array(acc).item()
+        pixel_acc = np.diag(self.confusion_matrix).sum() / (self.confusion_matrix.sum() + 1e-9)
+        per_class_acc = np.diag(self.confusion_matrix) / (self.confusion_matrix.sum(axis=1) + 1e-9)
+        macc = per_class_acc.sum() / ((np.sum(self.confusion_matrix, axis=1) > 0).sum() + 1e-9)
+        per_class_iou = np.diag(self.confusion_matrix) / (
+            np.sum(self.confusion_matrix, axis=1)
+            + np.sum(self.confusion_matrix, axis=0)
+            - np.diag(self.confusion_matrix)
+            + 1e-9
+        )
+        miou = per_class_iou.sum() / ((np.sum(self.confusion_matrix, axis=1) > 0).sum() + 1e-9)
+
+        return pixel_acc, macc, miou
     
     def update(self, pred, label):
-        self.confmat.update(pred, label)
+
+        gt = label.cpu().numpy()
+        mask = gt != self.ignore_index
+
+        pred = pred.cpu().numpy()
+
+        self.confusion_matrix += sklearn_confusion_matrix(
+            gt[mask], pred[mask], labels=[_ for _ in range(46)]
+        )
+
     
     def reset(self):
-        self.confmat.reset()
-
-    def to(self, device):
-        self.confmat.to(device)
-
-def nanmean(v, *args, inplace=True, **kwargs):
-    """
-    calculate the mean of v that contains nan values.
-    """
-    if not inplace:
-        v = v.clone()
-    is_nan = torch.isnan(v)
-    v[is_nan] = 0
-    return v.sum(*args, **kwargs) / (~is_nan).float().sum(*args, **kwargs)
+        self.confusion_matrix = np.zeros((46, 46))     
 
 
-class SegmentEvaluator:
-    """
-    Calculate the Pixel Acc and Mean Acc, and other metrics based on segmentation masks.
-    """
-    def __init__(self, is_sparse=False, categories=None):
-        self.is_sparse = is_sparse
-        self.categories = categories
-
-    def __call__(self, confmat, pre_fix="train", verbose=True):
-        if self.is_sparse:
-            true_confmat = confmat[:-1, :-1]
-        else:
-            true_confmat = confmat
-
-        # calculate pixel accuracy
-        with torch.no_grad():
-            correct = torch.diag(true_confmat).sum()
-            total = true_confmat.sum()
-
-            # pixel acc and mean class accuracy
-            accuracy = correct / total
-            acc_per_cls = (torch.diag(true_confmat) / true_confmat.sum(axis=1))
-            mean_acc = nanmean(acc_per_cls)
-
-            # iou
-            intersection = torch.diag(true_confmat)
-            union = true_confmat.sum(0) + true_confmat.sum(1) - intersection
-            iou_per_cls = intersection.float() / union.float()
-            iou_per_cls[torch.isinf(iou_per_cls)] = float('nan')
-            miou = nanmean(iou_per_cls)
-
-        if verbose:
-            print(pre_fix + "_acc", accuracy.tolist())
-            print(pre_fix + "_mean_acc", mean_acc.tolist())
-            print(pre_fix + "_miou", miou.tolist())
-
-            # log per category performance
-            if self.categories is not None:
-                for idx, acc in enumerate(acc_per_cls.cpu().numpy()):
-                    print(pre_fix + "_acc_cat_" + self.categories[idx], acc)
-
-        return accuracy.tolist(), acc_per_cls.tolist(), mean_acc.tolist(), iou_per_cls.tolist(), miou.tolist()
